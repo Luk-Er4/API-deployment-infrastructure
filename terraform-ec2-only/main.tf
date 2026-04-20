@@ -208,7 +208,7 @@ resource "aws_db_instance" "health_db" {
     network_type                          = "IPV4"
     option_group_name                     = "default:mysql-8-4"
     parameter_group_name                  = "default.mysql8.4"
-    password                              = "!7w6orN1JqS"
+    password                              = var.db_password
     performance_insights_enabled          = false
     performance_insights_kms_key_id       = null
     performance_insights_retention_period = 0
