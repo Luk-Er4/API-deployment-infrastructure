@@ -230,7 +230,7 @@ resource "aws_security_group" "sg_fargate_health" {
 resource "aws_vpc" "main" {
     cidr_block = "10.0.0.0/16"
     tags       = {
-        "Name" = "vpc-health-sys"
+        "Name" = "vpc-health-sys-fargate"
     }
 }
 
