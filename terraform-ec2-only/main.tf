@@ -80,6 +80,7 @@ resource "aws_subnet" "pub_1_health" {
     vpc_id            = aws_vpc.main.id
     cidr_block        = "10.1.1.0/24"
     availability_zone = "us-east-1a"
+    map_public_ip_on_launch = true
     tags = {
         Name = "subnet-pub-health-sys-1"
     }
@@ -89,6 +90,7 @@ resource "aws_subnet" "pub_2_health" {
     vpc_id            = aws_vpc.main.id
     cidr_block        = "10.1.2.0/24"
     availability_zone = "us-east-1b"
+    map_public_ip_on_launch = true
     tags = {
         Name = "subnet-pub-health-sys-2"
     }
@@ -238,6 +240,11 @@ resource "aws_instance" "ec2_api" {
   key_name                    = "key-pair-ec2-health-sys-api"
   user_data_replace_on_change = false
   iam_instance_profile        = "instanceRole"
+  subnet_id = aws_subnet.pub_1_health.id
+
+  vpc_security_group_ids = [
+    aws_security_group.ec2_api.id
+  ]
 
   user_data = templatefile("${path.module}/deploy.sh", {
     aws_region   = "us-east-1"
