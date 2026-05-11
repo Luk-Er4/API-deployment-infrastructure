@@ -47,3 +47,8 @@ variable "container_name_sys_api" {
 variable "container_name_data_api" {
   default = "health-data-api"
 }
+
+variable "https_certificate" {
+  type      = string
+  sensitive = true
+}

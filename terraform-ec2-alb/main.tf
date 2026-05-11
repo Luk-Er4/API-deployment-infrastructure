@@ -24,7 +24,7 @@ resource "aws_vpc_security_group_ingress_rule" "ec2_sys_api_in_fastapi" {
   from_port   = var.port_sys_api
   to_port     = var.port_sys_api
 
-  cidr_ipv4 = "0.0.0.0/0"
+  referenced_security_group_id = aws_security_group.sg_react_to_api.id # from alb sg
 }
 
 # Inbound Rule 2 (SSH) - EC2
@@ -62,7 +62,7 @@ resource "aws_vpc_security_group_ingress_rule" "ec2_data_api_in_fastapi" {
   from_port   = var.port_data_api
   to_port     = var.port_data_api
 
-  cidr_ipv4 = "0.0.0.0/0"
+  referenced_security_group_id = aws_security_group.sg_react_to_api.id # from alb sg
 }
 
 # Inbound Rule 2 (SSH) - EC2
@@ -415,5 +415,131 @@ resource "aws_instance" "ec2_vm_data_api" {
       user_data,
       user_data_base64,
     ]
+  }
+}
+
+### Resources for Application Load Balancer
+# sg for alb
+resource "aws_security_group" "sg_react_to_api" {
+  name        = "security-group-alb-health-react"
+  description = "sg for amplify"
+  vpc_id      = aws_vpc.main.id
+}
+
+# Inbound Rule 1 (HTTPS 443) - ALB
+resource "aws_vpc_security_group_ingress_rule" "health_alb_in" {
+  security_group_id = aws_security_group.sg_react_to_api.id
+
+  ip_protocol = "tcp"
+  from_port   = 443
+  to_port     = 443
+
+  cidr_ipv4 = "0.0.0.0/0"
+}
+
+# Outbound Rule 1 - ALB
+resource "aws_vpc_security_group_egress_rule" "health_alb_out" {
+  security_group_id = aws_security_group.sg_react_to_api.id
+
+  ip_protocol = "-1"
+
+  cidr_ipv4 = "0.0.0.0/0"
+}
+
+# Main ALB
+resource "aws_lb" "main" {
+    name               = "alb-health-sys-react"
+    load_balancer_type = "application"
+    subnets            = [
+        "${aws_subnet.pub_1_health.id}", # us-east-1a public
+        "${aws_subnet.pub_2_health.id}"  # us-east-1b public
+    ]
+    security_groups    = [aws_security_group.sg_react_to_api.id]
+}
+
+### ALB Target Groups
+# ALB tg (sys-api)
+resource "aws_lb_target_group" "health_ec2_sys_api" {
+    name        = "tg-health-sys-api"
+    port        = 8000
+    protocol    = "HTTP"
+    vpc_id      = aws_vpc.main.id
+    target_type = "instance"
+
+    health_check {
+        healthy_threshold   = 5
+        interval            = 30
+        matcher             = "200"
+        path                = "/"
+        protocol            = "HTTP"
+        timeout             = 5
+        unhealthy_threshold = 2
+    }
+}
+
+# ALB tg (data-api)
+resource "aws_lb_target_group" "health_ec2_data_api" {
+    name        = "tg-health-data-api"
+    port        = 8001
+    protocol    = "HTTP"
+    vpc_id      = aws_vpc.main.id
+    target_type = "instance"
+
+    health_check {
+        healthy_threshold   = 5
+        interval            = 30
+        matcher             = "200"
+        path                = "/"
+        protocol            = "HTTP"
+        timeout             = 5
+        unhealthy_threshold = 2
+    }
+}
+
+### ALB Listeners
+# Default Listener
+resource "aws_lb_listener" "https_health_apis" {
+    load_balancer_arn = aws_lb.main.arn
+    port              = 443
+    protocol          = "HTTPS"
+    certificate_arn   = var.https_certificate
+
+    default_action {
+        type             = "forward"
+        target_group_arn = aws_lb_target_group.health_ec2_sys_api.arn
+    }
+}
+
+# sys-api Listener
+resource "aws_lb_listener_rule" "listener_sys_api" {
+  listener_arn = aws_lb_listener.https_health_apis.arn
+  priority     = 1
+
+  condition {
+    host_header {
+      values = ["sys-api.health-scoring-system.com"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.health_ec2_sys_api.arn
+  }
+}
+
+# data-api Listener
+resource "aws_lb_listener_rule" "listener_data_api" {
+  listener_arn = aws_lb_listener.https_health_apis.arn
+  priority     = 2
+
+  condition {
+    host_header {
+      values = ["data-api.health-scoring-system.com"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.health_ec2_data_api.arn
   }
 }
