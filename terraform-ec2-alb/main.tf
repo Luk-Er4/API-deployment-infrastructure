@@ -12,7 +12,7 @@ resource "aws_vpc" "main" {
 ### sg for sys-api
 resource "aws_security_group" "ec2_sys_api" {
   name        = "security-group-ec2-health-sys-api"
-  description = "sg for ec2 api"
+  description = "sg for ec2 sys-api"
   vpc_id      = aws_vpc.main.id
 }
 
@@ -50,7 +50,7 @@ resource "aws_vpc_security_group_egress_rule" "ec2_sys_api_out_all" {
 ### sg for data-api
 resource "aws_security_group" "ec2_data_api" {
   name        = "security-group-ec2-health-data-api"
-  description = "sg for health data"
+  description = "sg for ec2 data-api"
   vpc_id      = aws_vpc.main.id
 }
 
@@ -89,7 +89,7 @@ resource "aws_vpc_security_group_egress_rule" "ec2_data_api_out_all" {
 ### Security Group for RDS (Shared for sys & data)
 resource "aws_security_group" "sg_rds" {
   name        = "security-group-rds-health-sys"
-  description = "sg for rds"
+  description = "sg for rds" 
   vpc_id      = aws_vpc.main.id
 }
 
@@ -422,7 +422,7 @@ resource "aws_instance" "ec2_vm_data_api" {
 # sg for alb
 resource "aws_security_group" "sg_react_to_api" {
   name        = "security-group-alb-health-react"
-  description = "sg for amplify"
+  description = "sg for react to amplify"
   vpc_id      = aws_vpc.main.id
 }
 
@@ -470,7 +470,7 @@ resource "aws_lb_target_group" "health_ec2_sys_api" {
         healthy_threshold   = 5
         interval            = 30
         matcher             = "200"
-        path                = "/"
+        path                = "/health"
         protocol            = "HTTP"
         timeout             = 5
         unhealthy_threshold = 2
@@ -489,7 +489,7 @@ resource "aws_lb_target_group" "health_ec2_data_api" {
         healthy_threshold   = 5
         interval            = 30
         matcher             = "200"
-        path                = "/"
+        path                = "/health"
         protocol            = "HTTP"
         timeout             = 5
         unhealthy_threshold = 2
@@ -541,5 +541,44 @@ resource "aws_lb_listener_rule" "listener_data_api" {
   action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.health_ec2_data_api.arn
+  }
+}
+
+# Attach sys-api as target
+resource "aws_lb_target_group_attachment" "sys_api" {
+  target_group_arn = aws_lb_target_group.health_ec2_sys_api.arn
+  target_id        = aws_instance.ec2_vm_sys_api.id
+  port             = 8000
+}
+
+# Attach data-api as target
+resource "aws_lb_target_group_attachment" "data_api" {
+  target_group_arn = aws_lb_target_group.health_ec2_data_api.arn
+  target_id        = aws_instance.ec2_vm_data_api.id
+  port             = 8001
+}
+
+# Route 53 Sub DNS name
+resource "aws_route53_record" "sys_api" {
+  zone_id = var.zone_id
+  name    = "sys-api.health-scoring-system.com"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
+}
+
+resource "aws_route53_record" "data_api" {
+  zone_id = var.zone_id
+  name    = "data-api.health-scoring-system.com"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = true
   }
 }
