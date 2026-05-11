@@ -9,27 +9,27 @@ resource "aws_vpc" "main" {
   }
 }
 
-### Security Group for EC2
-resource "aws_security_group" "ec2_api" {
+### sg for sys-api
+resource "aws_security_group" "ec2_sys_api" {
   name        = "security-group-ec2-health-sys-api"
   description = "sg for ec2 api"
   vpc_id      = aws_vpc.main.id
 }
 
 # Inbound Rule 1 (FastAPI) - EC2
-resource "aws_vpc_security_group_ingress_rule" "ec2_api_fastapi" {
-  security_group_id = aws_security_group.ec2_api.id
+resource "aws_vpc_security_group_ingress_rule" "ec2_sys_api_in_fastapi" {
+  security_group_id = aws_security_group.ec2_sys_api.id
 
   ip_protocol = "tcp"
-  from_port   = 8000
-  to_port     = 8000
+  from_port   = var.port_sys_api
+  to_port     = var.port_sys_api
 
   cidr_ipv4 = "0.0.0.0/0"
 }
 
 # Inbound Rule 2 (SSH) - EC2
-resource "aws_vpc_security_group_ingress_rule" "ec2_api_ssh" {
-  security_group_id = aws_security_group.ec2_api.id
+resource "aws_vpc_security_group_ingress_rule" "ec2_sys_api_in_ssh" {
+  security_group_id = aws_security_group.ec2_sys_api.id
 
   ip_protocol = "tcp"
   from_port   = 22
@@ -39,15 +39,54 @@ resource "aws_vpc_security_group_ingress_rule" "ec2_api_ssh" {
 }
 
 # Outbound Rule 1 - EC2
-resource "aws_vpc_security_group_egress_rule" "ec2_api_out" {
-  security_group_id = aws_security_group.ec2_api.id
+resource "aws_vpc_security_group_egress_rule" "ec2_sys_api_out_all" {
+  security_group_id = aws_security_group.ec2_sys_api.id
 
   ip_protocol = "-1"
 
   cidr_ipv4 = "0.0.0.0/0"
 }
 
-### Security Group for RDS
+### sg for data-api
+resource "aws_security_group" "ec2_data_api" {
+  name        = "security-group-ec2-health-data-api"
+  description = "sg for health data"
+  vpc_id      = aws_vpc.main.id
+}
+
+# Inbound Rule 1 (FastAPI) - EC2
+resource "aws_vpc_security_group_ingress_rule" "ec2_data_api_in_fastapi" {
+  security_group_id = aws_security_group.ec2_data_api.id
+
+  ip_protocol = "tcp"
+  from_port   = var.port_data_api
+  to_port     = var.port_data_api
+
+  cidr_ipv4 = "0.0.0.0/0"
+}
+
+# Inbound Rule 2 (SSH) - EC2
+resource "aws_vpc_security_group_ingress_rule" "ec2_data_api_in_ssh" {
+  security_group_id = aws_security_group.ec2_data_api.id
+
+  ip_protocol = "tcp"
+  from_port   = 22
+  to_port     = 22
+
+  cidr_ipv4 = "0.0.0.0/0"
+}
+
+# Outbound Rule 1 - EC2
+resource "aws_vpc_security_group_egress_rule" "ec2_data_api_out_all" {
+  security_group_id = aws_security_group.ec2_data_api.id
+
+  ip_protocol = "-1"
+
+  cidr_ipv4 = "0.0.0.0/0"
+}
+
+
+### Security Group for RDS (Shared for sys & data)
 resource "aws_security_group" "sg_rds" {
   name        = "security-group-rds-health-sys"
   description = "sg for rds"
@@ -159,7 +198,7 @@ resource "aws_route_table_association" "pub_2_health" {
 ### DB Subent Group
 resource "aws_db_subnet_group" "main" {
     description             = "subnet for rds user"
-    name                    = "rds-subnet-sql-health-sys"
+    name                    = "rds-subnet-sql-health-sys" # shared with rds-data
     name_prefix             = null
     subnet_ids              = [
         aws_subnet.pub_1_health.id,
@@ -167,8 +206,8 @@ resource "aws_db_subnet_group" "main" {
     ]
 }
 
-### RDS Instance
-resource "aws_db_instance" "health_db" {
+### RDS Instance (sys-db)
+resource "aws_db_instance" "health_sys_db" {
     allocated_storage                     = 20
     availability_zone                     = "us-east-1a"
     backup_retention_period               = 1
@@ -232,27 +271,94 @@ resource "aws_db_instance" "health_db" {
   ]
 }
 
-### EC2 Instance
-resource "aws_instance" "ec2_api" {
+### RDS Instance (data-db)
+resource "aws_db_instance" "health_data_db" {
+    allocated_storage                     = 20
+    availability_zone                     = "us-east-1a"
+    backup_retention_period               = 1
+    backup_target                         = "region"
+    backup_window                         = "05:56-06:26"
+    ca_cert_identifier                    = "rds-ca-rsa2048-g1"
+    character_set_name                    = null
+    copy_tags_to_snapshot                 = true
+    custom_iam_instance_profile           = null
+    customer_owned_ip_enabled             = false
+    database_insights_mode                = "standard"
+    db_name                               = null
+    db_subnet_group_name                  = aws_db_subnet_group.main.name
+    dedicated_log_volume                  = false
+    delete_automated_backups              = true
+    deletion_protection                   = false
+    domain                                = null
+    domain_auth_secret_arn                = null
+    domain_fqdn                           = null
+    domain_iam_role_name                  = null
+    domain_ou                             = null
+    enabled_cloudwatch_logs_exports       = []
+    engine                                = "mysql"
+    engine_lifecycle_support              = "open-source-rds-extended-support-disabled"
+    engine_version                        = "8.4.8"
+    iam_database_authentication_enabled   = false
+    identifier                            = "db-rds-health-data"
+    identifier_prefix                     = null
+    instance_class                        = "db.t4g.micro"
+    iops                                  = 0
+    kms_key_id                            = "arn:aws:kms:us-east-1:077369590118:key/38c093fe-6c39-48e9-82a5-1431b3f41472"
+    license_model                         = "general-public-license"
+    maintenance_window                    = "mon:09:35-mon:10:05"
+    max_allocated_storage                 = 1000
+    monitoring_interval                   = 0
+    monitoring_role_arn                   = null
+    multi_az                              = false
+    nchar_character_set_name              = null
+    network_type                          = "IPV4"
+    option_group_name                     = "default:mysql-8-4"
+    parameter_group_name                  = "default.mysql8.4"
+    password                              = var.db_password
+    performance_insights_enabled          = false
+    performance_insights_kms_key_id       = null
+    performance_insights_retention_period = 0
+    port                                  = 3306
+    publicly_accessible                   = true
+    replica_mode                          = null
+    replicate_source_db                   = null
+    skip_final_snapshot                   = true
+    storage_encrypted                     = true
+    storage_throughput                    = 0
+    storage_type                          = "gp2"
+    timezone                              = null
+    username                              = "admin"
+    vpc_security_group_ids                = [
+        aws_security_group.sg_rds.id,
+    ]
+    depends_on = [
+    aws_db_subnet_group.main
+  ]
+}
+
+### EC2 (sys-api)
+resource "aws_instance" "ec2_vm_sys_api" {
   ami                         = "ami-098e39bafa7e7303d"
   hibernation                 = false
   instance_type               = "t3.nano"
-  key_name                    = "key-pair-ec2-health-sys-api"
+  key_name                    = "key-pair-ec2-health-sys-api" # shared with data-api
   user_data_replace_on_change = false
   iam_instance_profile        = "instanceRole"
   subnet_id = aws_subnet.pub_1_health.id
 
   vpc_security_group_ids = [
-    aws_security_group.ec2_api.id
+    aws_security_group.ec2_sys_api.id
   ]
 
   user_data = templatefile("${path.module}/deploy.sh", {
     aws_region   = "us-east-1"
-    ecr_image_uri = var.ecr_image_uri
-    db_host      = aws_db_instance.health_db.address
-    db_name      = var.db_name
+    ecr_image_uri = var.ecr_image_uri_sys_api
+    db_host      = aws_db_instance.health_sys_db.address
+    db_name      = var.db_name_sys
     db_user      = var.db_user
     db_password  = var.db_password
+    ec2_port_num = var.port_sys_api
+    ec2_container_name = var.container_name_sys_api
   })
 
   credit_specification {
@@ -271,3 +377,43 @@ resource "aws_instance" "ec2_api" {
   }
 }
 
+### EC2 (data-api)
+resource "aws_instance" "ec2_vm_data_api" {
+  ami                         = "ami-098e39bafa7e7303d"
+  hibernation                 = false
+  instance_type               = "t3.nano"
+  key_name                    = "key-pair-ec2-health-sys-api" # shared with sys-api
+  user_data_replace_on_change = false
+  iam_instance_profile        = "instanceRole"
+  subnet_id = aws_subnet.pub_1_health.id
+
+  vpc_security_group_ids = [
+    aws_security_group.ec2_data_api.id
+  ]
+
+  user_data = templatefile("${path.module}/deploy.sh", {
+    aws_region   = "us-east-1"
+    ecr_image_uri = var.ecr_image_uri_data_api
+    db_host      = aws_db_instance.health_data_db.address
+    db_name      = var.db_name_data
+    db_user      = var.db_user
+    db_password  = var.db_password
+    ec2_port_num = var.port_data_api
+    ec2_container_name = var.container_name_data_api
+  })
+
+  credit_specification {
+    cpu_credits = "unlimited"
+  }
+
+  tags = {
+    Name = "ec2-vm-health-data-api"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      user_data,
+      user_data_base64,
+    ]
+  }
+}

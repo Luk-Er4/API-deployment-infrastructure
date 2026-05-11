@@ -12,12 +12,6 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
-variable "project_name" {
-  description = "Project name prefix"
-  type        = string
-  default     = "health-sys"
-}
-
 variable "db_user" {
   default = "admin"
   type = string
@@ -36,4 +30,20 @@ variable "db_name_data" {
 variable "db_password" {
   type      = string
   sensitive = true
+}
+
+variable "port_sys_api" {
+  default = "8000"
+}
+
+variable "port_data_api" {
+  default = "8001"
+}
+
+variable "container_name_sys_api" {
+  default = "health-sys-api"
+}
+
+variable "container_name_data_api" {
+  default = "health-data-api"
 }
